@@ -1,0 +1,97 @@
+\name{likelihood_MSBD_unresolved}
+\alias{likelihood_MSBD_unresolved}
+%- Also NEED an '\alias' for EACH other topic documented here.
+\title{
+Likelihood calculation for unresolved trees
+}
+\description{
+Calculates the negative log likelihood of a multi-states model given a tree. This function is designed to work with unresolved trees, where tips represent collapsed clades.
+}
+\usage{
+likelihood_MSBD_unresolved(tree, shifts, gamma, lambdas, mus, 
+                            lambda_rates = NULL, stepsize = NULL, 
+                            uniform_weights = TRUE, p_lambda = 0, p_mu = 0, 
+                            rho = 1, sigma = 0, rho_sampling = TRUE, 
+                            unresolved = FALSE, lineage_counts = c(), tcut = NULL)
+}
+%- maybe also 'usage' for other objects documented here.
+\arguments{
+  \item{tree}{
+The phylogenetic tree (in ape format) to calculate the likelihood on
+}
+  \item{shifts}{
+Matrix describing the positions (edges and times) of shifts. See 'Details'.
+}
+  \item{gamma}{
+Rate of state change
+}
+  \item{lambdas}{
+Birth rates of all states
+}
+  \item{mus}{
+Death rates of all states
+}
+  \item{lambda_rates}{
+Rates of decay of birth rate for all states. If provided, stepsize should also be provided.
+}
+  \item{stepsize}{
+Size of the step to use for time discretization with exponential decay, default NULL. If provided, lambda_rates should also be provided.
+}
+  \item{uniform_weights}{
+Whether all states are weighted uniformly in shifts, default true. If false, the weights of states are calculated from the provided distributions on lambda and mu. See 'Details'.
+}
+  \item{p_lambda}{
+Prior probability distribution on lambda, used if uniform_weights is false.
+}
+  \item{p_mu}{
+Prior probability distribution on mu, used if uniform_weights is false.
+}
+  \item{rho}{
+Sampling proportion on extant tips, default 1.
+}
+  \item{sigma}{
+Sampling probability on extinct tips (tips are sampled upon extinction), default 0.
+}
+  \item{rho_sampling}{
+If true, the most recent tips will be considered extant tips and use the sampling proportion rho. If false, all tips will be considered extinct tips and use the sampling probability sigma. Should be true for most macroevolution datasets and false for most epidemiology datasets.
+}
+   \item{unresolved}{
+Whether to use the 'cutoff' sampling scheme, default false. If true, the times at cutoff and the number of lineages need to be provided for all tips. This sampling scheme is not recommended for epidemiology datasets. This sampling scheme supports extinct tips outside of the unresolved parts.
+}
+  \item{lineage_counts}{
+Number of lineages collapsed on each tip, used if unresolved is true. Should be set to 1 for extinct tips.
+}
+  \item{tcut}{
+Times of collapsing for each tip (i.e time of the mrca of all collapsed lineages), used if unresolved is true. Can be a single number or a vector of length the number of tips (recommended).
+}
+}
+\details{
+It is to be noted that all times are counted backwards, with the most recent tip positioned at 0. \cr
+\cr
+The 'shifts' matrix is composed of 3 columns and a number of rows. Each row describes a shift: the first column is the index of the edge on which the shift happens, the second column is the time of the shift, and the third column is the index of the new state. For example the row vector (3,0.5,2) specifies a shift on edge number 3, at time 0.5, towards the state that has parameters lambdas[2], lambda_rates[2] and mus[2]. \cr
+\cr
+The weights w are used for calculating the transition rates q from each state i to j: \eqn{q_{i,j}=\gamma*w_{i,j}}{q(i,j)=\gamma*w(i,j)}. If \code{uniform_weights} is true, \eqn{w_{i,j} = \frac{1}{N-1}}{w(i,j)=1/(N-1)} for all i,j, where N is the total number of states. If \code{uniform_weights} is false, \eqn{w_{i,j} = \frac{p_\lambda(\lambda_j)p_\mu(\mu_j)}{sum_{k \ne i}p_\lambda(\lambda_k)p_\mu(\mu_k)}}{w(i,j)=p\lambda(\lambdaj)p\mu(\muj)/sum(p\lambda(\lambdak)p\mu(\muk)) for all k!=i} where the distributions \eqn{p_\lambda}{p\lambda} and \eqn{p_\mu}{p\mu} are provided by the inputs \code{plambda} and \code{pmu}.
+}
+\value{
+The value of the negative log likelihood of the model given the tree.
+}
+\author{
+\packageAuthor{ML.MSBD}
+}
+\examples{
+# Simulate a random phylogeny
+set.seed(24)
+tree <- ape::rcoal(10)
+
+# Calculate the log likelihood under a constant birth-death model (i.e, no shifts) 
+# with unresolved tips
+likelihood_MSBD_unresolved(tree, shifts = c(), gamma = 0, lambdas = 10, mus = 1, 
+  unresolved = TRUE, lineage_counts = c(2,5,1,3,1,1,1,1,2,6), tcut = 0.05)
+# Calculate the log likelihood under a multi-states model with 2 states and unresolved tips
+likelihood_MSBD_unresolved(tree, shifts = matrix(c(2,0.7,2), nrow = 1), 
+  gamma = 0.05, lambdas = c(10, 5), mus = c(1, 1), 
+  unresolved = TRUE, lineage_counts = c(2,5,1,3,1,1,1,1,2,6), tcut = 0.05)
+}
+% Add one or more standard keywords, see file 'KEYWORDS' in the
+% R documentation directory.
+\keyword{ models }% use one of  RShowDoc("KEYWORDS")

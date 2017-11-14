@@ -1,0 +1,13 @@
+db976b405c0faac7b72b1d01a86bb0c3 *DESCRIPTION
+89c385405d20310c58d09d3a91e8961d *NAMESPACE
+0cc0d698566f1454999158e23a25c331 *R/ML_MSBD.R
+d75d8970253b0461bfef20a3d0b29b68 *R/likelihood_MSBD.R
+183abd48e83db49b6e978850b513a5a1 *R/likelihood_MSBD_unresolved.R
+6ca846a18055cf7824dbb6e0550623b6 *R/likelihood_aux.R
+6e2dc3b8a6486f342326437e4cdb568b *R/params_conversion.R
+0151f59cf26d9ce232c2fa0273481674 *R/tree_auxiliary.R
+1e7fac5c63ed06242740c75d48a06f24 *build/partial.rdb
+740ae1b9634dac6e00387c0253755550 *man/ML.MSBD-package.Rd
+15ed99098292673bba4c81336101618d *man/ML_MSBD.Rd
+e506a6628a01a2c4d3c9cf2ecd888dca *man/likelihood_MSBD.Rd
+5a6a1453596752fafc1089bce82da22e *man/likelihood_MSBD_unresolved.Rd
