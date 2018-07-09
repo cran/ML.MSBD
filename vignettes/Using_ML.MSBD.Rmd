@@ -1,0 +1,75 @@
+---
+title: "Using ML.MSBD"
+author: "Joelle Barido-Sottani"
+date: "`r Sys.Date()`"
+output: html_document
+vignette: >
+  %\VignetteIndexEntry{Using ML.MSBD}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ML.MSBD)
+set.seed(25)
+```
+
+## ML.MSBD package
+
+This package implements a Maximum Likelihood inference of a mulit-state birth-death model on dated phylogenies. It is designed primarily to detect transmission clusters in epidemics such as HIV where the transmission rate depends on the number of connections between infected and non-infected individuals. However, it can be applied to any situation where sudden jumps in the birth or death rate of the phylogeny are expected.
+
+## Running an inference
+
+The ML inference is run using the `ML_MSBD` function, which takes a phylogeny in `ape` format as input. Initial values for all estimated parameters need to be provided: by default these are the state change rate, the birth rate and the death rate. The `time_mode` parameter controls where state changes will be placed on the edges of the phylogeny.
+
+```{r}
+tree <- ape::rcoal(10)
+```
+```{r, eval=FALSE}
+ML_MSBD(tree, initial_values = c(0.1, 10, 1), time_mode = "mid")
+```
+
+Sampling through time is supported and sampling proportions can be set differently for extant sampling (`rho`) and extinct sampling (`sigma`). It is also possible to treat all tips as extinct samples.
+
+```{r}
+tree_stt <- ape::rtree(10)
+```
+```{r, eval=FALSE}
+ML_MSBD(tree_stt, initial_values = c(0.1, 10, 1), rho = 0.5, sigma = 0.1, time_mode = "mid")
+
+ML_MSBD(tree_stt, initial_values = c(0.1, 10, 1), rho_sampling = FALSE, sigma = 0.1, time_mode = "mid")
+```
+
+By default the birth rate is constant for a given state. It can also be set to decay exponentially, in which case a step size for the likelihood calculation and an initial value for the birth decay rate need to be provided.
+
+```{r, eval=FALSE}
+ML_MSBD(tree, initial_values = c(0.1, 10, 1), c(0.1, 10, 0.5, 1), sigma = 1, stepsize = 0.1, time_mode = "mid")
+```
+
+More details about the options available for the cluster inference and its output can be found using `?ML_MSBD`.
+
+## Likelihood calculation
+
+The likelihood of a given model configuration on a phylogeny can also be calculated directly. The position of state changes need to be given as a matrix containing the edge and time of the change and the index of the new state. 
+
+```{r}
+likelihood_MSBD(tree, shifts = matrix(c(2,0.8,2), nrow = 1), gamma = 0.05, lambdas = c(10, 6), mus = c(1, 0.5))
+```
+
+The same sampling and exponential decay options are available as in the ML inference.
+
+```{r}
+likelihood_MSBD(tree_stt, shifts = c(), gamma = 0.05, lambdas = 10, mus = 0.5, sigma = 0.5, rho_sampling = FALSE)
+likelihood_MSBD(tree, shifts = c(), gamma = 0.05, lambdas = 10, mus = 0.5, lambda_rates = 0.1, stepsize = 0.05)
+```
+
+Another option for sampling is clade-collapsing sampling, where only one lineage per group or family is sampled. In this case the number of distinct tips represented by each lineage and the MRCA age(s) of the collapsed clades need to be provided.
+
+```{r}
+tree_collapsed = ape::rcoal(4)
+likelihood_MSBD_unresolved(tree_collapsed, shifts = matrix(c(2,0.25,2), nrow = 1), gamma = 0.05, lambdas = c(10, 6), mus = c(1, 0.5), lineage_counts = c(5,1,3,6), tcut = 0.1)
+likelihood_MSBD_unresolved(tree_collapsed, shifts = matrix(c(2,0.25,2), nrow = 1), gamma = 0.05, lambdas = c(10, 6), mus = c(1, 0.5), lineage_counts = c(5,1,3,6), tcut = c(0.1,0.0,0.15,0.4))
+```
+
+More details about the available options for likelihood calculation can be found using `?likelihood_MSBD` or `?likelihood_MSBD_unresolved`.

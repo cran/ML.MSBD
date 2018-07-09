@@ -1,8 +1,60 @@
+#' Likelihood calculation for randomly sampled trees
+#' 
+#' Calculates the negative log likelihood of a multi-states model given a tree. 
+#' This function is designed to work with constant extant and/or extinct sampling.
+#' 
+#' @param tree Phylogenetic tree (in ape format) to calculate the likelihood on.
+#' @param shifts Matrix describing the positions (edges and times) of shifts. See 'Details'.
+#' @param gamma Rate of state change.
+#' @param lambdas Birth rates of all states.
+#' @param mus Death rates of all states.
+#' @param lambda_rates Rates of decay of birth rate for all states. To use exponential decay, \code{stepsize} should also be provided.
+#' @param stepsize Size of the step to use for time discretization with exponential decay, default NULL. To use exponential decay, \code{lambda_rates} should also be provided.
+#' @param uniform_weights Whether all states are weighted uniformly in shifts, default TRUE. If FALSE, the weights of states are calculated from the distributions \code{p_lambda} and \code{p_mu}. See 'Details'.
+#' @param p_lambda Prior probability distribution on lambdas, used if \code{uniform_weights = FALSE}.
+#' @param p_mu Prior probability distribution on mus, used if \code{uniform_weights = FALSE}.
+#' @param rho Sampling proportion on extant tips, default 1.
+#' @param sigma Sampling probability on extinct tips (tips are sampled upon extinction), default 0.
+#' @param rho_sampling Whether the most recent tips should be considered extant tips, sampled with sampling proportion \code{rho}. If FALSE, all tips will be considered extinct tips, sampled with sampling probability \code{sigma}. Should be TRUE for most macroevolution datasets and FALSE for most epidemiology datasets.
+#' @param unresolved Whether this tree is the backbone of an unresolved tree. This is an internal variable used in calculations for unresolved trees.
+#' @param add_time The time between the most recent tip and the end of the process (>=0). This is an internal variable used in calculations for unresolved trees.
+#' 
+#' @return The value of the negative log likelihood of the model given the tree.
+#' 
+#' @details It is to be noted that all times are counted backwards, with the most recent tip positioned at 0. \cr\cr
+#' The 'shifts' matrix is composed of 3 columns and a number of rows. Each row describes a shift: the first column is the index of the edge on which the shift happens, 
+#' the second column is the time of the shift, and the third column is the index of the new state. For example the row vector (3,0.5,2) specifies a shift on edge number 3, at time 0.5, 
+#' towards the state that has parameters \code{lambdas[2]}, \code{lambda_rates[2]} and \code{mus[2]}. \cr\cr
+#' The weights w are used for calculating the transition rates q from each state i to j: \eqn{q_{i,j}=\gamma*w_{i,j}}{q(i,j)=\gamma*w(i,j)}. 
+#' If \code{uniform_weights = TRUE}, \eqn{w_{i,j} = \frac{1}{N-1}}{w(i,j)=1/(N-1)} for all i,j, where N is the total number of states. 
+#' If \code{uniform_weights = FALSE}, \eqn{w_{i,j} = \frac{p_\lambda(\lambda_j)p_\mu(\mu_j)}{sum_{k \ne i}p_\lambda(\lambda_k)p_\mu(\mu_k)}}{w(i,j)=p\lambda(\lambdaj)p\mu(\muj)/sum(p\lambda(\lambdak)p\mu(\muk)) for all k!=i}
+#' where the distributions \eqn{p_\lambda}{p\lambda} and \eqn{p_\mu}{p\mu} are provided by the inputs \code{p_lambda} and \code{p_mu}.
+#' 
+#' @examples
+#' # Simulate a random phylogeny
+#' set.seed(25)
+#' tree <- ape::rtree(10)
+#' 
+#' # Calculate the log likelihood under a constant birth-death model (i.e, no shifts) 
+#' # with full extant & extinct sampling
+#' likelihood_MSBD(tree, shifts = c(), gamma = 0, lambdas = 10, mus = 1, sigma = 1)
+#' # Calculate the log likelihood under a multi-states model with 2 states 
+#' # and full extant & extinct sampling
+#' likelihood_MSBD(tree, shifts = matrix(c(2,1.8,2), nrow = 1), 
+#'                 gamma = 0.05, lambdas = c(10, 6), mus = c(1, 0.5), sigma = 1)
+#' # Calculate the log likelihood under a multi-states model with 2 states and exponential decay 
+#' # with full extant & extinct sampling
+#' likelihood_MSBD(tree, shifts = matrix(c(2,1.8,2), nrow = 1), 
+#'                 gamma = 0.05, lambdas = c(10, 6), mus = c(1, 0.5), 
+#'                 sigma = 1, stepsize = 0.01, lambda_rates = c(0.1, 0.1))
+#' 
+#' @export
+
 likelihood_MSBD = function(tree,shifts,gamma,lambdas,mus,
-                                     lambda_rates = NULL,stepsize = NULL,
-                                     uniform_weights = TRUE,p_lambda=0,p_mu=0,
-                                     rho = 1, sigma = 0, rho_sampling = TRUE,
-                                     add_time = 0, unresolved = FALSE) {
+                           lambda_rates = NULL,stepsize = NULL,
+                           uniform_weights = TRUE,p_lambda=0,p_mu=0,
+                           rho = 1, sigma = 0, rho_sampling = TRUE,
+                           add_time = 0, unresolved = FALSE) {
   
   if(length(lambdas)!=length(mus)) {
     stop("Numbers of lambdas and mus are not consistent")
@@ -12,7 +64,7 @@ likelihood_MSBD = function(tree,shifts,gamma,lambdas,mus,
   }
   if(rho>1 || rho<0 || sigma>1 || sigma<0) stop("Invalid sampling proportions")
   if(!rho_sampling && rho != 0) rho=0
-    
+  
   if(!is.null(stepsize) && is.null(lambda_rates)) {
     warning("Stepsize provided but no lambda rates, will default to no decay")
     stepsize = NULL
@@ -128,7 +180,7 @@ likelihood_MSBD = function(tree,shifts,gamma,lambdas,mus,
         }
       }
     }
-
+    
     #what is the event at the end of the edge
     if(node2>ntips) {
       d = desc[[node2-ntips]]

@@ -1,20 +1,120 @@
+#' Full Maximum Likelihood inference of birth and death rates together with their changes along a phylogeny under a multi-type birth-death model.
+#' 
+#' Infers a complete MSBD model from a phylogeny, including the most likely number of states, positions and times of state changes, and parameters associated with each state. 
+#' Uses a greedy approach to add states and Maximum Likelihood inference for the other parameters.
+#' 
+#' @param tree Phylogenetic tree (in ape format) to calculate the likelihood on.
+#' @param initial_values Initial values for the optimizer, to be provided as a vector in this order: gamma (optional), lambda, lambda decay rate (optional), mu (optional). See 'Details'.
+#' @param uniform_weights Whether all states are weighted uniformly in shifts, default TRUE. If FALSE, the weights of states are calculated from the distributions \code{p_lambda} and \code{p_mu}. See 'Details'.
+#' @param p_lambda Prior probability distribution on lambdas, used if \code{uniform_weights = FALSE}.
+#' @param p_mu Prior probability distribution on mus, used if \code{uniform_weights = FALSE}.
+#' @param rho Sampling proportion on extant tips, default 1.
+#' @param sigma Sampling probability on extinct tips (tips are sampled upon extinction), default 0.
+#' @param rho_sampling Whether the most recent tips should be considered extant tips, sampled with sampling proportion \code{rho}. If FALSE, all tips will be considered extinct tips, sampled with sampling probability \code{sigma}. Should be TRUE for most macroevolution datasets and FALSE for most epidemiology datasets.
+#' @param lineage_counts For trees with clade collapsing. Number of lineages collapsed on each tip. Should be set to 1 for extinct tips. 
+#' @param tcut For trees with clade collapsing. Times of clade collapsing for each tip (i.e time of the MRCA of all collapsed lineages). Can be a single number or a vector of length the number of tips.
+#' @param stepsize Size of the step to use for time discretization with exponential decay, default NULL. To use exponential decay, an initial value for \code{lambda_rates} should also be provided.
+#' @param no_extinction Whether to use the Yule process (\code{mu=0}) for all states, default FALSE. If TRUE no initial value for \code{mu} is needed.
+#' @param fixed_gamma Value to which \code{gamma} should be fixed, default NULL. If provided no initial value for \code{gamma} is needed.
+#' @param unique_lambda Whether to use the same value of \code{lambda} for all states, default FALSE. If TRUE and exponential decay is active all states will also share the same value for \code{lambda_rate}.
+#' @param unique_mu Whether to use the same value of \code{mu} for all states, default FALSE.
+#' 
+#' @param optim_control Control list for the optimizer, corresponds to control input in optim function, see \code{?optim} for details.
+#' @param attempt_remove Whether to attempt to remove shifts at the end of the inference, default TRUE. If FALSE, use a pure greedy algorithm.
+#' @param max_nshifts Maximum number of shifts to test for, default \code{Inf}.
+#' @param saved_state If provided, the inference will be restarted from this state.
+#' @param save_path If provided, the progress of the inference will be saved to this path after each optimization step.
+#' @param time_mode String controlling the time positions of inferred shifts. See 'Details'.
+#' @param fast_optim Whether to use the faster mode of optimization, default FALSE. If TRUE only rates associated with the state currently being added to the tree and its ancestor will be optimized at each step, otherwise all rates are optimized.
+#' 
+#' @return Returns a list describing the most likely model found, with the following components:
+#' \item{\code{likelihood}}{the negative log likelihood of the model}
+#' \item{\code{shifts.edge}}{the indexes of the edges where shifts happen, 0 indicates the root state}
+#' \item{\code{shifts.time}}{the time positions of shifts}
+#' \item{\code{gamma}}{the rate of state change}
+#' \item{\code{lambdas}}{the birth rates of all states}
+#' \item{\code{lambda_rates}}{if exponential decay was activated, the rates of decay of birth rate for all states}
+#' \item{\code{mus}}{the death rates of all states}
+#' \item{\code{best_models}}{a vector containing the negative log likelihood of the best model found for each number of states tested (\code{best_models[i]} corresponds to i states, i.e i-1 shifts)}
+#' All vectors are indexed in the same way, so that the state with parameters \code{lambdas[i]}, \code{lambda_rates[i]} and \code{mus[i]} starts on edge \code{shifts.edge[i]} at time \code{shifts.time[i]}.
+#' 
+#' @details It is to be noted that all times are counted backwards, with the most recent tip positioned at 0. \cr\cr
+#' 
+#' Five time modes are possible for the input \code{time_mode}. 
+#' In \code{tip} mode, the shifts will be placed at 10\% of the length of the edge. 
+#' In \code{mid} mode, the shifts will be placed at 50\% of the length of the edge. 
+#' In \code{root} mode, the shifts will be placed at 90\% of the length of the edge. 
+#' In \code{3pos} mode, the three "tip", "mid" and "root" positions will be tested.\cr\cr
+#' 
+#' The weights w are used for calculating the transition rates q from each state i to j: \eqn{q_{i,j}=\gamma*w_{i,j}}{q(i,j)=\gamma*w(i,j)}. 
+#' If \code{uniform_weights = TRUE}, \eqn{w_{i,j} = \frac{1}{N-1}}{w(i,j)=1/(N-1)} for all i,j, where N is the total number of states. 
+#' If \code{uniform_weights = FALSE}, \eqn{w_{i,j} = \frac{p_\lambda(\lambda_j)p_\mu(\mu_j)}{sum_{k \ne i}p_\lambda(\lambda_k)p_\mu(\mu_k)}}{w(i,j)=p\lambda(\lambdaj)p\mu(\muj)/sum(p\lambda(\lambdak)p\mu(\muk)) for all k!=i}
+#' where the distributions \eqn{p_\lambda}{p\lambda} and \eqn{p_\mu}{p\mu} are provided by the inputs \code{p_lambda} and \code{p_mu}.\cr\cr
+#' 
+#' Initial values for the optimization need to be provided as a vector and contain the following elements (in order): 
+#' an initial value for gamma, which is required unless \code{fixed_gamma} is provided, 
+#' an initial value for lambda which is always required, 
+#' an initial value for lambda decay rate, which is required if \code{stepsize} is provided, 
+#' and an initial value for mu, which is required unless \code{no_extinction = TRUE}. 
+#' An error will be raised if the number of initial values provided does not match the one expected from the rest of the settings, 
+#' and the function will fail if the likelihood cannot be calculated at the initial values.
+#' 
+#' @examples
+#' # Simulate a random phylogeny
+#' set.seed(25)
+#' tree <- ape::rtree(10)
+#' 
+#' # Infer the most likely multi-states birth-death model 
+#' # with full extant & extinct sampling
+#' \dontrun{ML_MSBD(tree, initial_values = c(0.1, 10, 1), sigma = 1, time_mode = "mid") }
+#' # Infer the most likely multi-states birth-death model with exponential decay
+#' # and full extant & extinct sampling
+#' \dontrun{ML_MSBD(tree, initial_values = c(0.1, 10, 0.5, 1), sigma = 1, 
+#'                  stepsize = 0.1, time_mode = "mid")}
+#' 
+#' # Simulate a random phylogeny with extant samples
+#' set.seed(24)
+#' tree2 <- ape::rcoal(10)
+#' 
+#' # Infer the most likely multi-states Yule model with partial extant sampling
+#' \dontrun{ML_MSBD(tree2, initial_values = c(0.1, 10), no_extinction = TRUE, 
+#'                   rho = 0.5, time_mode = "mid")}
+#' # Infer the most likely multi-states birth-death model with full extant sampling 
+#' # and unresolved extant tips
+#' \dontrun{ML_MSBD(tree2, initial_values = c(0.1, 10, 1), 
+#'                   lineage_counts = c(2,5,1,3,1,1,1,1,2,6), tcut = 0.05, time_mode = "mid")}
+#' 
+#' @export
+
 ML_MSBD = function(tree,initial_values,
                    uniform_weights=TRUE,p_lambda=0,p_mu=0,
                    rho = 1, sigma=0, rho_sampling = TRUE,
-                   unresolved = FALSE, lineage_counts = c(), tcut = 0,
-                   optim_control = list(),attempt_remove=TRUE,max_nshifts=Inf,
+                   lineage_counts = c(), tcut = 0,
                    stepsize=NULL, no_extinction=FALSE, fixed_gamma=NULL,
                    unique_lambda = FALSE, unique_mu = FALSE,
+                   optim_control = list(),attempt_remove=TRUE,max_nshifts=Inf,
                    saved_state = NULL, save_path = NULL,
-                   time_mode = c("real","3pos","tip","mid","root"),
+                   time_mode = c("3pos","tip","mid","root"),
                    fast_optim = FALSE) {
   
-  if(time_mode %in% c("real","tip","mid","root")) time_positions = time_mode
+  if(time_mode %in% c("tip","mid","root")) time_positions = time_mode
   else if (time_mode == "3pos") time_positions = c("tip","mid","root")
-  else stop("Invalid time positions mode, available are tip, mid, root, 3pos and real")
+  else stop("Invalid time positions mode, available are tip, mid, root and 3pos")
   
   if(rho>1 || rho<0 || sigma>1 || sigma<0) stop("Invalid sampling proportions")
   if(!rho_sampling && rho != 0) rho=0
+  
+  if(length(lineage_counts) > 0 && !is.null(tcut)) {
+    print("Clade collapsing detected")
+    
+    ntips = length(tree$tip.label)
+    if(length(lineage_counts) != ntips) stop("The vector of number of collapsed species doesn't match with the number of tips")
+    if(is.null(tcut)) stop("Time(s) of clade collapsing need to be provided")
+    if(length(tcut) ==1) tcut = rep(tcut, ntips)
+    if(length(tcut) != ntips) stop("The vector of times of clade collapsing doesn't match with the number of tips")
+  }
+  
+  ptm = proc.time()[3]
   
   if(is.null(saved_state)) {
     initial_values = .get_initial_values_from_vector(initial_values,stepsize, no_extinction, fixed_gamma)
@@ -23,7 +123,7 @@ ML_MSBD = function(tree,initial_values,
     temp = .ML_optim(tree,c(),initial_values, c(),
                      uniform_weights,p_lambda,p_mu,
                      rho,sigma,rho_sampling,
-                     unresolved,lineage_counts,tcut,
+                     lineage_counts,tcut,
                      optim_control, "fixed",
                      stepsize,no_extinction,fixed_gamma,
                      unique_lambda,unique_mu, fast_optim)
@@ -33,7 +133,10 @@ ML_MSBD = function(tree,initial_values,
     }
     else {
       saved_state = list(initial_screen = TRUE, bestl = temp$l, pars = temp$p, initial_values = initial_values)
-      if(!is.null(save_path)) save(saved_state, file=save_path)
+      if(!is.null(save_path) && proc.time()[3] - ptm > 600) {
+        save(saved_state, file=save_path)
+        ptm = proc.time()[3]
+      }
     }
   }
   
@@ -47,24 +150,30 @@ ML_MSBD = function(tree,initial_values,
         
         iv = saved_state$initial_values
         iv[[i]] = iv[[i]]*10
-        temp = .ML_optim(tree,c(),iv, c(),uniform_weights,p_lambda,p_mu,rho,sigma,rho_sampling,unresolved,lineage_counts,tcut,
+        temp = .ML_optim(tree,c(),iv, c(),uniform_weights,p_lambda,p_mu,rho,sigma,rho_sampling,lineage_counts,tcut,
                          optim_control, "fixed",stepsize,no_extinction,fixed_gamma,unique_lambda,unique_mu, fast_optim)
         if(!is.na(temp$l) && temp$l<saved_state$bestl) {
           done = FALSE
           saved_state$bestl = temp$l
           saved_state$initial_values = iv
           saved_state$pars = temp$p
-          if(!is.null(save_path)) save(saved_state, file=save_path)
+          if(!is.null(save_path) && proc.time()[3] - ptm > 600) {
+            save(saved_state, file=save_path)
+            ptm = proc.time()[3]
+          }
         }
         iv[[i]] = iv[[i]]/100
-        temp = .ML_optim(tree,c(),iv, c(),uniform_weights,p_lambda,p_mu,rho,sigma,rho_sampling,unresolved,lineage_counts,tcut,
+        temp = .ML_optim(tree,c(),iv, c(),uniform_weights,p_lambda,p_mu,rho,sigma,rho_sampling,lineage_counts,tcut,
                          optim_control, "fixed",stepsize,no_extinction,fixed_gamma,unique_lambda,unique_mu, fast_optim)
         if(!is.na(temp$l) && temp$l<saved_state$bestl) {
           done = FALSE
           saved_state$bestl = temp$l
           saved_state$initial_values = iv
           saved_state$pars = temp$p
-          if(!is.null(save_path)) save(saved_state, file=save_path)
+          if(!is.null(save_path) && proc.time()[3] - ptm > 600) {
+            save(saved_state, file=save_path)
+            ptm = proc.time()[3]
+          }
         }
       }
       if(done) break
@@ -80,7 +189,10 @@ ML_MSBD = function(tree,initial_values,
     if(is.null(fixed_gamma)) newsaved_state$initial_values$gamma = saved_state$initial_values$gamma
     
     saved_state = newsaved_state
-    if(!is.null(save_path)) save(saved_state, file=save_path)
+    if(!is.null(save_path) && proc.time()[3] - ptm > 600) {
+      save(saved_state, file=save_path)
+      ptm = proc.time()[3]
+    }
   }
   
   while(TRUE) {
@@ -108,7 +220,7 @@ ML_MSBD = function(tree,initial_values,
                          saved_state$initial_values,saved_state$times,
                          uniform_weights,p_lambda,p_mu,
                          rho,sigma,rho_sampling,
-                         unresolved,lineage_counts,tcut,
+                         lineage_counts,tcut,
                          optim_control, time_pos,
                          stepsize,no_extinction,fixed_gamma,
                          unique_lambda,unique_mu, fast_optim, saved_state$params, anc_state)
@@ -122,7 +234,10 @@ ML_MSBD = function(tree,initial_values,
       }
       
       saved_state$partial$tested_edges = c(saved_state$partial$tested_edges,i)
-      if(!is.null(save_path)) save(saved_state, file=save_path)
+      if(!is.null(save_path) && proc.time()[3] - ptm > 600) {
+        save(saved_state, file=save_path)
+        ptm = proc.time()[3]
+      }
     }
     
     saved_state$best_models = c(saved_state$best_models, saved_state$partial$min_lik)
@@ -158,7 +273,7 @@ ML_MSBD = function(tree,initial_values,
                          saved_state$initial_values, time_tmp,
                          uniform_weights,p_lambda,p_mu,
                          rho,sigma,rho_sampling,
-                         unresolved,lineage_counts,tcut,
+                         lineage_counts,tcut,
                          optim_control, "fixed",
                          stepsize,no_extinction,fixed_gamma,
                          unique_lambda,unique_mu,
@@ -178,7 +293,10 @@ ML_MSBD = function(tree,initial_values,
         }
       }
       
-      if(!is.null(save_path)) save(saved_state, file=save_path)
+      if(!is.null(save_path) && proc.time()[3] - ptm > 600) {
+        save(saved_state, file=save_path)
+        ptm = proc.time()[3]
+      }
     }
   }
   #decombine parameter vector in exploitable form
@@ -195,8 +313,8 @@ ML_MSBD = function(tree,initial_values,
 .ML_optim = function(tree,edges,initial_values, times,
                      uniform_weights=TRUE,p_lambda=0,p_mu=0,
                      rho=1, sigma=0, rho_sampling = TRUE,
-                     unresolved = FALSE, lineage_counts = c(), tcut = 0,
-                     optim_control=list(), time_mode = c("real","tip","mid","root","fixed"),
+                     lineage_counts = c(), tcut = 0,
+                     optim_control=list(), time_mode = c("tip","mid","root","fixed"),
                      stepsize=NULL, no_extinction=FALSE, fixed_gamma=NULL,
                      unique_lambda = FALSE, unique_mu = FALSE,
                      fast_optim = FALSE, current_values = NULL, anc_state=0) {
@@ -235,11 +353,6 @@ ML_MSBD = function(tree,initial_values,
     if(!is.null(values$lambda_rates) && sum(values$lambda_rates<0)>0) return(NA)
     if(sum(values$mus<0)>0) return(NA)
     
-    if(time_mode == "real") { #time of last shift is inferred
-      times[n] = p[length(p)]
-      if(times[n]<tmin || times[n]>tmax) return(NA)
-    }
-    
     for(j in seq(along=edges)) {
       e = edges[j]
       t = times[j]
@@ -250,14 +363,13 @@ ML_MSBD = function(tree,initial_values,
                                      values$lambda_rates,stepsize,
                                      uniform_weights,p_lambda,p_mu,
                                      rho,sigma,rho_sampling,
-                                     unresolved,lineage_counts,tcut)
+                                     lineage_counts,tcut)
     return(res)
   }
   
   #initial parameters values
   if(!fast_optim) initp = .get_vector_from_initial_values(initial_values, n+1, stepsize, no_extinction, fixed_gamma, unique_lambda, unique_mu)
   else initp = .get_vector_from_initial_values_fast(initial_values, n+1, stepsize, no_extinction, fixed_gamma, unique_lambda, unique_mu)
-  if(time_mode == "real") initp = c(initp, (tmin+tmax)/2)
   
   #optim on auxfun
   out=try(stats::optim(initp, auxfun,control=optim_control))
@@ -273,10 +385,6 @@ ML_MSBD = function(tree,initial_values,
       out=stats::optim(out$par, auxfun,control=optim_control)
     }
     
-    if(time_mode == "real") {
-      times[n] = out$par[length(out$par)]
-      out$par = out$par[-length(out$par)]
-    }
     result = list(l=out$value, t=times[n])
     if(!fast_optim) result$p=.get_params_from_vector(out$par, n+1, stepsize, no_extinction, fixed_gamma, unique_lambda, unique_mu)
     else result$p=.get_params_from_vector_fast(out$par, n+1, current_values, anc_state,

@@ -36,9 +36,9 @@ likelihood_MSBD(tree, shifts = matrix(c(2,1.8,2), nrow = 1),
   gamma = 0.05, lambdas = c(10, 6), mus = c(1, 0.5), sigma = 1)
 
 # Infer the most likely multi-states birth-death model with full extant & extinct sampling
-\donttest{ML_MSBD(tree, initial_values = c(0.1, 10, 1), sigma = 1, time_mode = "real") }
+\dontrun{ML_MSBD(tree, initial_values = c(0.1, 10, 1), sigma = 1, time_mode = "mid") }
 # Infer the most likely multi-states birth-death model with exponential decay 
 # and full extant & extinct sampling
-\donttest{ML_MSBD(tree, initial_values = c(0.1, 10, 0.5, 1), sigma = 1, 
+\dontrun{ML_MSBD(tree, initial_values = c(0.1, 10, 0.5, 1), sigma = 1, 
   stepsize = 0.1, time_mode = "mid")}
 }
