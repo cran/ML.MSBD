@@ -60,10 +60,12 @@
 #' and the function will fail if the likelihood cannot be calculated at the initial values.
 #' 
 #' @examples
-#' # Simulate a random phylogeny
-#' set.seed(25)
-#' tree <- ape::rtree(10)
-#' 
+#' # Input a phylogeny
+#' tree <- ape::read.tree(text = "(((t4:0.7293960718,(t1:0.450904974,t3:0.09259337652)
+#'         :0.04068535892):0.4769176776,t8:0.1541864066):0.7282000314,((t7:0.07264320855,
+#'         (((t5:0.8231869878,t6:0.3492440532):0.2380232813,t10:0.2367582193):0.5329497182,
+#'         t9:0.1016243151):0.5929288475):0.3003101915,t2:0.8320755605):0.2918686506);")
+#'
 #' # Infer the most likely multi-states birth-death model 
 #' # with full extant & extinct sampling
 #' \dontrun{ML_MSBD(tree, initial_values = c(0.1, 10, 1), sigma = 1, time_mode = "mid") }
@@ -72,9 +74,11 @@
 #' \dontrun{ML_MSBD(tree, initial_values = c(0.1, 10, 0.5, 1), sigma = 1, 
 #'                  stepsize = 0.1, time_mode = "mid")}
 #' 
-#' # Simulate a random phylogeny with extant samples
-#' set.seed(24)
-#' tree2 <- ape::rcoal(10)
+#' # Input a phylogeny with extant samples
+#' tree2 <- ape::read.tree(text = "(t3:0.9703302342,((t4:0.1999577823,(t2:0.1287530271,
+#'         (t7:0.08853561159,(t8:0.07930237712,t9:0.07930237712):0.009233234474):0.04021741549):
+#'         0.07120475526):0.4269919425,(((t10:0.0191876225,t5:0.0191876225):0.04849906822,
+#'         t6:0.06768669072):0.1672340445,t1:0.2349207353):0.3920289896):0.3433805094);")
 #' 
 #' # Infer the most likely multi-states Yule model with partial extant sampling
 #' \dontrun{ML_MSBD(tree2, initial_values = c(0.1, 10), no_extinction = TRUE, 

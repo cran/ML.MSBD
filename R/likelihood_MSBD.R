@@ -31,9 +31,11 @@
 #' where the distributions \eqn{p_\lambda}{p\lambda} and \eqn{p_\mu}{p\mu} are provided by the inputs \code{p_lambda} and \code{p_mu}.
 #' 
 #' @examples
-#' # Simulate a random phylogeny
-#' set.seed(25)
-#' tree <- ape::rtree(10)
+#' # Input a phylogeny
+#' tree <- ape::read.tree(text = "(((t4:0.7293960718,(t1:0.450904974,t3:0.09259337652)
+#'         :0.04068535892):0.4769176776,t8:0.1541864066):0.7282000314,((t7:0.07264320855,
+#'         (((t5:0.8231869878,t6:0.3492440532):0.2380232813,t10:0.2367582193):0.5329497182,
+#'         t9:0.1016243151):0.5929288475):0.3003101915,t2:0.8320755605):0.2918686506);")
 #' 
 #' # Calculate the log likelihood under a constant birth-death model (i.e, no shifts) 
 #' # with full extant & extinct sampling
