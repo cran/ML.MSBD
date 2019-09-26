@@ -1,3 +1,7 @@
+## Version 1.2.0
+
+* Added parallel implementation for the ML inference using the package doParallel.
+
 ## Version 1.1.1
 
 * Modified examples to use fixed trees instead of randomly generated ones (for compatibility with future R releases)

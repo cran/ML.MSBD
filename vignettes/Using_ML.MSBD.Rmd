@@ -16,7 +16,7 @@ library(ML.MSBD)
 
 ## ML.MSBD package
 
-This package implements a Maximum Likelihood inference of a mulit-state birth-death model on dated phylogenies. It is designed primarily to detect transmission clusters in epidemics such as HIV where the transmission rate depends on the number of connections between infected and non-infected individuals. However, it can be applied to any situation where sudden jumps in the birth or death rate of the phylogeny are expected.
+This package implements a Maximum Likelihood inference of a multi-state birth-death model on dated phylogenies. It is designed primarily to detect transmission clusters in epidemics such as HIV where the transmission rate depends on the number of connections between infected and non-infected individuals. However, it can be applied to any situation where sudden jumps in the birth or death rate of the phylogeny are expected.
 
 ## Running an inference
 

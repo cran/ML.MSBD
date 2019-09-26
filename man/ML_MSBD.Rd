@@ -10,7 +10,8 @@ ML_MSBD(tree, initial_values, uniform_weights = TRUE, p_lambda = 0,
   no_extinction = FALSE, fixed_gamma = NULL, unique_lambda = FALSE,
   unique_mu = FALSE, optim_control = list(), attempt_remove = TRUE,
   max_nshifts = Inf, saved_state = NULL, save_path = NULL,
-  time_mode = c("3pos", "tip", "mid", "root"), fast_optim = FALSE)
+  time_mode = c("3pos", "tip", "mid", "root"), fast_optim = FALSE,
+  parallel = FALSE, ncores = getOption("mc.cores", 2L))
 }
 \arguments{
 \item{tree}{Phylogenetic tree (in ape format) to calculate the likelihood on.}
@@ -56,6 +57,10 @@ ML_MSBD(tree, initial_values, uniform_weights = TRUE, p_lambda = 0,
 \item{time_mode}{String controlling the time positions of inferred shifts. See 'Details'.}
 
 \item{fast_optim}{Whether to use the faster mode of optimization, default FALSE. If TRUE only rates associated with the state currently being added to the tree and its ancestor will be optimized at each step, otherwise all rates are optimized.}
+
+\item{parallel}{Whether the computation should be run in parallel, default FALSE. Will use a user-defined cluster if one is found, otherwise will define its own.}
+
+\item{ncores}{Number of cores to use for a parallel computation.}
 }
 \value{
 Returns a list describing the most likely model found, with the following components:

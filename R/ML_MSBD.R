@@ -26,6 +26,8 @@
 #' @param save_path If provided, the progress of the inference will be saved to this path after each optimization step.
 #' @param time_mode String controlling the time positions of inferred shifts. See 'Details'.
 #' @param fast_optim Whether to use the faster mode of optimization, default FALSE. If TRUE only rates associated with the state currently being added to the tree and its ancestor will be optimized at each step, otherwise all rates are optimized.
+#' @param parallel Whether the computation should be run in parallel, default FALSE. Will use a user-defined cluster if one is found, otherwise will define its own.
+#' @param ncores Number of cores to use for a parallel computation.
 #' 
 #' @return Returns a list describing the most likely model found, with the following components:
 #' \item{\code{likelihood}}{the negative log likelihood of the model}
@@ -96,10 +98,11 @@ ML_MSBD = function(tree,initial_values,
                    lineage_counts = c(), tcut = 0,
                    stepsize=NULL, no_extinction=FALSE, fixed_gamma=NULL,
                    unique_lambda = FALSE, unique_mu = FALSE,
-                   optim_control = list(),attempt_remove=TRUE,max_nshifts=Inf,
+                   optim_control = list(), attempt_remove=TRUE, max_nshifts=Inf,
                    saved_state = NULL, save_path = NULL,
                    time_mode = c("3pos","tip","mid","root"),
-                   fast_optim = FALSE) {
+                   fast_optim = FALSE, 
+                   parallel = FALSE, ncores = getOption('mc.cores', 2L)) {
   
   if(time_mode %in% c("tip","mid","root")) time_positions = time_mode
   else if (time_mode == "3pos") time_positions = c("tip","mid","root")
@@ -116,6 +119,22 @@ ML_MSBD = function(tree,initial_values,
     if(is.null(tcut)) stop("Time(s) of clade collapsing need to be provided")
     if(length(tcut) ==1) tcut = rep(tcut, ntips)
     if(length(tcut) != ntips) stop("The vector of times of clade collapsing doesn't match with the number of tips")
+  }
+  
+  if(parallel) {
+    if (! requireNamespace("doParallel", quietly = TRUE)) stop("Parallel computation requires the doParallel package.")
+    if (! foreach::getDoParRegistered() ) {
+      doParallel::registerDoParallel(ncores)
+      message('Registered parallel computation with ', ncores, ' workers')
+      on.exit(doParallel::stopImplicitCluster())
+    } else {
+      message('Using parallel computation with existing', foreach::getDoParName(), 
+            ' with ', foreach::getDoParWorkers(), ' workers')
+    }
+    `%d%` <- foreach::`%dopar%`
+  } else {
+    message('Executing sequential computation')
+    `%d%` <- foreach::`%do%`
   }
   
   ptm = proc.time()[3]
@@ -203,22 +222,24 @@ ML_MSBD = function(tree,initial_values,
     #if no more edges free, stop
     if(length(saved_state$edges)==length(tree$edge) || length(saved_state$edges) == max_nshifts) break
     
-    if(is.null(saved_state$partial)) {
+    if(!parallel && is.null(saved_state$partial)) {
       saved_state$partial = list(edge_min = 0, time_min = NULL, p_min = NULL, min_lik = Inf, tested_edges = c())
     }
     
     #test max estimates for all edges
-    for(i in 1:length(tree$edge[,1])) {
-      
-      if(i %in% saved_state$partial$tested_edges) next #already tested edge
-      if(is.element(i,saved_state$edges)) next #disallow multiple shifts on the same edge
+    all_edges = foreach::foreach (i = 1:length(tree$edge[,1]), .packages = "ML.MSBD") %d% {
+
+      if(!parallel && i %in% saved_state$partial$tested_edges) return(list(edge = i, lik = Inf)) #already tested edge
+      if(is.element(i,saved_state$edges)) return(list(edge = i, lik = Inf)) #disallow multiple shifts on the same edge
+
       if(tree$edge.length[i] == 0) { #zero-length edge
-        saved_state$partial$tested_edges = c(saved_state$partial$tested_edges,i)
-        next
+        if(!parallel) saved_state$partial$tested_edges = c(saved_state$partial$tested_edges,i)
+        return(list(edge = i, lik = Inf))
       }
       
       if(fast_optim) anc_state = .find_ancestral_state(tree, i, saved_state$edges)
       
+      edge_results = list(edge = i, lik = Inf, pars = NULL, time = NULL)
       for(time_pos in time_positions) {
         temp = .ML_optim(tree,c(saved_state$edges,i),
                          saved_state$initial_values,saved_state$times,
@@ -229,24 +250,39 @@ ML_MSBD = function(tree,initial_values,
                          stepsize,no_extinction,fixed_gamma,
                          unique_lambda,unique_mu, fast_optim, saved_state$params, anc_state)
         
-        if(!is.na(temp$l) && temp$l<saved_state$partial$min_lik) {
+        if(!is.na(temp$l) && temp$l < edge_results$lik) {
+          edge_results$lik = temp$l
+          edge_results$pars = temp$p
+          edge_results$time = temp$t
+        }
+      }
+      
+      if(!parallel) {
+        if(edge_results$lik < saved_state$partial$min_lik) {
           saved_state$partial$edge_min = i
           saved_state$partial$time_min = temp$t
           saved_state$partial$p_min = temp$p
           saved_state$partial$min_lik = temp$l
         }
+        saved_state$partial$tested_edges = c(saved_state$partial$tested_edges,i)
+        if(!is.null(save_path) && proc.time()[3] - ptm > 600) {
+          save(saved_state, file=save_path)
+          ptm = proc.time()[3]
+        }
       }
-      
-      saved_state$partial$tested_edges = c(saved_state$partial$tested_edges,i)
-      if(!is.null(save_path) && proc.time()[3] - ptm > 600) {
-        save(saved_state, file=save_path)
-        ptm = proc.time()[3]
-      }
+      return(edge_results)
+    }
+    
+    if(parallel) {
+      liks = sapply(all_edges, function(x) x$lik)
+      best = which(liks == min(liks))
+      saved_state$partial = list(edge_min = all_edges[[best]]$edge, time_min = all_edges[[best]]$time, 
+                                 p_min = all_edges[[best]]$pars, min_lik = all_edges[[best]]$lik)
     }
     
     saved_state$best_models = c(saved_state$best_models, saved_state$partial$min_lik)
     
-    if(saved_state$likelihood>saved_state$partial$min_lik) {
+    if(saved_state$likelihood > saved_state$partial$min_lik) {
       saved_state$edges = c(saved_state$edges,saved_state$partial$edge_min)
       saved_state$times = c(saved_state$times,saved_state$partial$time_min)
       saved_state$params = saved_state$partial$p_min
