@@ -1,3 +1,7 @@
+## Version 1.2.1
+
+* Updated dependencies of the package. No functional changes.
+
 ## Version 1.2.0
 
 * Added parallel implementation for the ML inference using the package doParallel.
